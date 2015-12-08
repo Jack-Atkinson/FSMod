@@ -1677,6 +1677,7 @@ static void set_uuid_media_variable(const char* uuid)
 	if(channel == 0) return;
 
 	switch_channel_set_variable(channel, "uuid_media", "true");
+	switch_core_session_rwunlock(session);
 
 	other_uuid = switch_channel_get_variable(channel, SWITCH_BRIDGE_VARIABLE);
 	if(other_uuid == 0) return;
@@ -1688,6 +1689,7 @@ static void set_uuid_media_variable(const char* uuid)
 	if(other_channel == 0) return;
 
 	switch_channel_set_variable(other_channel, "uuid_media", "true");
+	switch_core_session_rwunlock(other_session);
 }
 // gqp end
 
