@@ -7569,11 +7569,12 @@ SWITCH_DECLARE(void) switch_core_media_gen_local_sdp(switch_core_session_t *sess
 					"%s",
 					username, smh->owner_id, smh->session_id, family, ip, username, family, ip, srbuf);
 
-
-	if (switch_channel_test_flag(smh->session->channel, CF_ICE)) {
-		gen_ice(session, SWITCH_MEDIA_TYPE_AUDIO, ip, port);
-		switch_snprintf(buf + strlen(buf), SDPBUFLEN - strlen(buf), "a=msid-semantic: WMS %s\n", smh->msid);
-	}
+	// gqp delete begin
+	//if (switch_channel_test_flag(smh->session->channel, CF_ICE)) {
+	//	gen_ice(session, SWITCH_MEDIA_TYPE_AUDIO, ip, port);
+	//	switch_snprintf(buf + strlen(buf), SDPBUFLEN - strlen(buf), "a=msid-semantic: WMS %s\n", smh->msid);
+	//}
+	// gqp delete end
 
 	if (a_engine->codec_negotiated) {
 		switch_snprintf(buf + strlen(buf), SDPBUFLEN - strlen(buf), "m=audio %d %s", port, 
