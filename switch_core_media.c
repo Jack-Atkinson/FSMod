@@ -3159,6 +3159,10 @@ static switch_status_t check_ice(switch_media_handle_t *smh, switch_media_type_t
 	engine->ice_in.cand_idx[0] = 0;
 	engine->ice_in.cand_idx[1] = 0;
 
+	//gqp add begin
+	return SWITCH_STATUS_SUCCESS;
+	//gqp add end
+
 	if (m) {
 		attr = m->m_attributes;
 	} else {
@@ -7004,7 +7008,7 @@ static void generate_m(switch_core_session_t *session, char *buf, size_t buflen,
 #ifdef GOOGLE_ICE
 		switch_snprintf(buf + strlen(buf), buflen - strlen(buf), "a=ice-options:google-ice\n");
 #endif
-	}
+	}	
 
 
 	if (secure && !switch_channel_test_flag(session->channel, CF_DTLS)) {
@@ -9261,7 +9265,6 @@ SWITCH_DECLARE(switch_status_t) switch_core_media_receive_message(switch_core_se
 	case SWITCH_MESSAGE_INDICATE_3P_MEDIA:
 	case SWITCH_MESSAGE_INDICATE_MEDIA:
 		{
-
 			a_engine->codec_negotiated = 0;
 			v_engine->codec_negotiated = 0;
 			
