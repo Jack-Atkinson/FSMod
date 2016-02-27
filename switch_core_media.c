@@ -7194,64 +7194,124 @@ static void add_fb(char *buf, uint32_t buflen, int pt, int fir, int nack, int pl
 }
 
 // gqp add
-static void add_candidate(switch_core_session_t *session, char* buf)
+static int get_origin_candidate_str(switch_core_session_t *session, const char* mediaA, const char* mediaB, const char** begin, const char** end, const char** origin_sdp)
 {
-    int add_candidate_ok = 0, old_buf_len;
-    const char * alegsdp = switch_channel_get_variable(session->channel, SWITCH_B_SDP_VARIABLE);
-    const char *uuid_media = switch_channel_get_variable(session->channel, "uuid_media");
+	const char *alegsdp = switch_channel_get_variable(session->channel, SWITCH_B_SDP_VARIABLE);
+	int sdplen = strlen(alegsdp);
+	const char *sdpend = alegsdp + sdplen;
+	const char *a, *b;
 
-    if(switch_true(uuid_media)){
-    	switch_channel_set_variable(session->channel, "uuid_media", "false");
-    	return;
-    }
-    
-    old_buf_len = strlen(buf);
+	*origin_sdp = alegsdp;
+
+	a = strstr(alegsdp, mediaA);
+	if(a == 0){
+		return SWITCH_FALSE;
+	}
+	*begin = a;
+	
+	b = strstr(alegsdp, mediaB);
+	if(b == 0){
+		*end = sdpend;
+		return SWITCH_TRUE;
+	}
+
+	if(b > a){
+		*end = b;
+		return SWITCH_TRUE;
+	}
+
+	*end = sdpend;
+	return SWITCH_TRUE;
+}
+
+static int uuid_media_api_executed(switch_core_session_t *session)
+{
+	const char *uuid_media = switch_channel_get_variable(session->channel, "uuid_media");
+	return switch_true(uuid_media);
+}
+
+static void clear_uuid_media_api_executed_flag(switch_core_session_t *session)
+{
+	switch_channel_set_variable(session->channel, "uuid_media", "false");
+}
+
+static void add_candidate(char* buf, const char* origin_begin, const char* origin_end, const char* origin_sdp)
+{
+	int old_buf_len = strlen(buf);
+	int add_candidate_ok = SWITCH_FALSE;
+
     do {
-        char *ice_ufrag, *ice_pwd, *candidate, *ssrc;
+        const char *ice_ufrag, *ice_pwd, *candidate, *ssrc;
         int ice_ufrag_len, ice_pwd_len, candidate_len, ssrc_len;
-        if(alegsdp == 0) break;
+        int buf_idx = old_buf_len;
 
-        ice_ufrag = (char*)alegsdp;
-        ice_ufrag = strstr(ice_ufrag, "a=ice-ufrag");
-        if(ice_ufrag == 0) break;
+        ice_ufrag = strstr(origin_begin, "a=ice-ufrag");
+        if(ice_ufrag == 0){
+        	ice_ufrag = strstr(origin_sdp, "a=ice-ufrag");
+        }
+        if(ice_ufrag == 0 || ice_ufrag > origin_end) break;
         ice_ufrag_len = strstr(ice_ufrag, "\n") - ice_ufrag + 1;
-        buf[strlen(buf)+ice_ufrag_len] = 0;
-        memcpy(buf + strlen(buf), ice_ufrag, ice_ufrag_len);
+        memcpy(buf + buf_idx, ice_ufrag, ice_ufrag_len);
+        buf_idx += ice_ufrag_len;
 
-        ice_pwd = ice_ufrag+ice_ufrag_len;
-        ice_pwd = strstr(ice_pwd, "a=ice-pwd");
-        if(ice_pwd == 0) break;
+        ice_pwd = strstr(origin_begin, "a=ice-pwd");
+        if(ice_pwd == 0){
+        	ice_pwd = strstr(origin_sdp, "a=ice-pwd");
+        }
+        if(ice_pwd == 0 || ice_pwd > origin_end) break;
         ice_pwd_len = strstr(ice_pwd, "\n") - ice_pwd + 1;
-        buf[strlen(buf)+ice_pwd_len] = 0;
-        memcpy(buf + strlen(buf), ice_pwd, ice_pwd_len);
+        memcpy(buf + buf_idx, ice_pwd, ice_pwd_len);
+        buf_idx += ice_pwd_len;
 
-        candidate = ice_pwd+ice_pwd_len;
+        candidate = origin_begin;
         do {
             candidate = strstr(candidate, "a=candidate");
-            if(candidate == 0) break;
+            if(candidate == 0 || candidate > origin_end) break;
             candidate_len = strstr(candidate, "\n") - candidate + 1;
-            buf[strlen(buf)+candidate_len] = 0;
-            memcpy(buf+strlen(buf), candidate, candidate_len);
+            memcpy(buf+buf_idx, candidate, candidate_len);
+            buf_idx += candidate_len;
             candidate += candidate_len;
         } while(1);
 
-        ssrc = ice_pwd + ice_pwd_len;
+        ssrc = origin_begin;
         do {
         	ssrc = strstr(ssrc, "a=ssrc");
-        	if(ssrc == 0)break;
+        	if(ssrc == 0 || ssrc > origin_end)break;
         	ssrc_len = strstr(ssrc, "\n") - ssrc + 1;
-        	buf[strlen(buf)+ssrc_len] = 0;
-        	memcpy(buf+strlen(buf), ssrc, ssrc_len);
+        	memcpy(buf+buf_idx, ssrc, ssrc_len);
         	ssrc += ssrc_len;
         } while(1);
 
-        add_candidate_ok = 1;
+        add_candidate_ok = SWITCH_TRUE;
 
     }while(0);
-    if(add_candidate_ok == 0) {
+    if(add_candidate_ok == SWITCH_FALSE) {
         buf[old_buf_len] = 0;
     }
-    
+}
+
+static int bitbrothers_extension_used()
+{
+	return switch_true(switch_core_get_variable("gqp"));
+}
+
+static void add_media_candidate(switch_core_session_t *session, const char* mediaA, const char* mediaB, char* buf)
+{
+	const char *begin, *end, *origin_sdp;
+	if(bitbrothers_extension_used() == SWITCH_FALSE){
+		return;
+	}
+
+	// uuid_media  used for join conference, no need candidates
+	if(uuid_media_api_executed(session)){
+		return;
+	}
+
+	if(get_origin_candidate_str(session, mediaA, mediaB, &begin, &end, &origin_sdp)){
+		add_candidate(buf, begin, end, origin_sdp);
+	}
+
+	return;
 }
 // gqp end
 
@@ -7414,7 +7474,9 @@ SWITCH_DECLARE(void) switch_core_media_gen_local_sdp(switch_core_session_t *sess
 				
 				// gqp modify begin
 				//if (smh->ianacodes[i] > 64) {
-				if (smh->ianacodes[i] > 64 && smh->ianacodes[i] != 85) {
+				//if (smh->ianacodes[i] > 64 && smh->ianacodes[i] != 85) {
+				if (smh->ianacodes[i] > 64 && smh->ianacodes[i] != 85 && smh->ianacodes[i] != 97 
+					&& smh->ianacodes[i] != 98) {
 				// gqp modify end
 					if (smh->mparams->dtmf_type == DTMF_2833 && smh->mparams->te > 95 && smh->mparams->te == smh->payload_space) {
 						smh->payload_space++;
@@ -7708,11 +7770,10 @@ SWITCH_DECLARE(void) switch_core_media_gen_local_sdp(switch_core_session_t *sess
 
 		//switch_snprintf(buf + strlen(buf), SDPBUFLEN - strlen(buf), "a=ssrc:%u\n", a_engine->ssrc);
 
-		// gqp add begin
-	    if(switch_false(switch_core_get_variable("gqp"))){
-		// gqp add end		
-
-		if (a_engine->ice_out.cands[0][0].ready) {
+        // gqp modify begin		
+	    //if (a_engine->ice_out.cands[0][0].ready) {
+		if (a_engine->ice_out.cands[0][0].ready && (bitbrothers_extension_used() == SWITCH_FALSE)) {
+		// gqp modify end
 			char tmp1[11] = "";
 			char tmp2[11] = "";
 			uint32_t c1 = (2^24)*126 + (2^8)*65535 + (2^0)*(256 - 1);
@@ -7785,9 +7846,6 @@ SWITCH_DECLARE(void) switch_core_media_gen_local_sdp(switch_core_session_t *sess
 			switch_snprintf(buf + strlen(buf), SDPBUFLEN - strlen(buf), "a=ice-options:google-ice\n");
 #endif
 		}
-		// gqp add
-		}
-		// gqp end
 
 		if (a_engine->crypto_type != CRYPTO_INVALID && !switch_channel_test_flag(session->channel, CF_DTLS) &&
 			!zstr(a_engine->ssec[a_engine->crypto_type].local_crypto_key) && switch_channel_test_flag(session->channel, CF_SECURE)) {
@@ -7875,11 +7933,9 @@ SWITCH_DECLARE(void) switch_core_media_gen_local_sdp(switch_core_session_t *sess
 
 	}
 
-	// gqp add
-	if(switch_true(switch_core_get_variable("gqp"))){
-		add_candidate(session, buf);
-	}
-	// gqp end
+	// gqp add begin
+	add_media_candidate(session, "m=audio", "m=video", buf);
+	// gqp add end
 
 	if (!switch_channel_test_flag(session->channel, CF_VIDEO_POSSIBLE)) {
 		if (switch_channel_test_flag(session->channel, CF_VIDEO_SDP_RECVD)) {
@@ -8206,8 +8262,10 @@ SWITCH_DECLARE(void) switch_core_media_gen_local_sdp(switch_core_session_t *sess
 				}
 				
 				//switch_snprintf(buf + strlen(buf), SDPBUFLEN - strlen(buf), "a=ssrc:%u\n", v_engine->ssrc);
-
-				if (v_engine->ice_out.cands[0][0].ready) {
+				//gqp modify begin
+                //if (v_engine->ice_out.cands[0][0].ready) {
+				if (v_engine->ice_out.cands[0][0].ready && (bitbrothers_extension_used() == SWITCH_FALSE)) {
+				//gqp modify end
 					char tmp1[11] = "";
 					char tmp2[11] = "";
 					uint32_t c1 = (2^24)*126 + (2^8)*65535 + (2^0)*(256 - 1);
@@ -8314,6 +8372,10 @@ SWITCH_DECLARE(void) switch_core_media_gen_local_sdp(switch_core_session_t *sess
 
 	}
 
+	// gqp add begin
+	add_media_candidate(session, "m=video", "m=audio", buf);
+	clear_uuid_media_api_executed_flag(session);
+	// gqp add end
 
 	if (map) {
 		switch_event_destroy(&map);
