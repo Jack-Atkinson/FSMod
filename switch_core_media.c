@@ -7197,9 +7197,16 @@ static void add_fb(char *buf, uint32_t buflen, int pt, int fir, int nack, int pl
 static int get_origin_candidate_str(switch_core_session_t *session, const char* mediaA, const char* mediaB, const char** begin, const char** end, const char** origin_sdp)
 {
 	const char *alegsdp = switch_channel_get_variable(session->channel, SWITCH_B_SDP_VARIABLE);
-	int sdplen = strlen(alegsdp);
-	const char *sdpend = alegsdp + sdplen;
+	int sdplen;
+	const char *sdpend;
 	const char *a, *b;
+
+	if(alegsdp == 0){
+		return SWITCH_FALSE;
+	}
+
+	sdplen = strlen(alegsdp);
+	sdpend = alegsdp + sdplen;
 
 	*origin_sdp = alegsdp;
 
